@@ -32,6 +32,16 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import android.net.SSLCertificateSocketFactory;
+import android.os.Build;
+import android.util.Log;
+import java.net.InetSocketAddress;
+import java.lang.Error;
 import com.amazonaws.services.iot.client.AWSIotException;
 
 /**
@@ -45,23 +55,25 @@ public class AwsIotTlsSocketFactory extends SSLSocketFactory {
      * SSL Socket Factory A SSL socket factory is created and passed into this
      * class which decorates it to enable TLS 1.2 when sockets are created.
      */
-    private final SSLSocketFactory sslSocketFactory;
-
-    public AwsIotTlsSocketFactory(KeyStore keyStore, String keyPassword) throws AWSIotException {
+    private final SSLCertificateSocketFactory sslSocketFactory;
+    private String endpoint;
+    public AwsIotTlsSocketFactory(KeyStore keyStore, String keyPassword, String endpoint) throws AWSIotException {
         try {
-            SSLContext context = SSLContext.getInstance(TLS_V_1_2);
-
+        	this.endpoint = endpoint;
+            //SSLContext context = SSLContext.getInstance(TLS_V_1_2);
             KeyManagerFactory managerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             managerFactory.init(keyStore, keyPassword.toCharArray());
-            context.init(managerFactory.getKeyManagers(), null, null);
-
-            sslSocketFactory = context.getSocketFactory();
-        } catch (NoSuchAlgorithmException | KeyStoreException | UnrecoverableKeyException | KeyManagementException e) {
+            //context.init(managerFactory.getKeyManagers(), null, null);
+            //sslSocketFactory = context.getSocketFactory();
+            sslSocketFactory = (SSLCertificateSocketFactory) SSLCertificateSocketFactory.getDefault(0, null);
+            sslSocketFactory.setKeyManagers(managerFactory.getKeyManagers());
+            
+        } catch (NoSuchAlgorithmException | KeyStoreException | UnrecoverableKeyException e) {
             throw new AWSIotException(e);
         }
     }
 
-    public AwsIotTlsSocketFactory(SSLSocketFactory sslSocketFactory) {
+    public AwsIotTlsSocketFactory(SSLCertificateSocketFactory sslSocketFactory) {
         this.sslSocketFactory = sslSocketFactory;
     }
 
@@ -116,15 +128,51 @@ public class AwsIotTlsSocketFactory extends SSLSocketFactory {
      * @return TLS 1.2 enabled socket.
      */
     private Socket ensureTls(Socket socket) {
-        if (socket != null && (socket instanceof SSLSocket)) {
-            ((SSLSocket) socket).setEnabledProtocols(new String[] { TLS_V_1_2 });
+    	if (socket != null) {
+            ((SSLSocket) socket).setEnabledProtocols(new String[]{TLS_V_1_2});
 
             // Ensure hostname is validated againt the CN in the certificate
             SSLParameters sslParams = new SSLParameters();
-            sslParams.setEndpointIdentificationAlgorithm("HTTPS");
-            ((SSLSocket) socket).setSSLParameters(sslParams);
-        }
-        return socket;
+	    	if(java.lang.System.getProperty("java.vendor").equalsIgnoreCase("The Android Project"))
+	    	{
+	    		try {
+	                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+	                    sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+	                } else {
+	                	Log.i("AwsIotTlsSocketFactory.ensureTls", "Using Android older than 7.0, SSLParameters.setEndpointIdentificationAlgorithm() is not supported");
+	                	if(!((SSLSocket) socket).isConnected()) {
+	                		Log.i("AwsIotTlsSocketFactory.ensureTls", "socket is not connect, connecting to " + endpoint + ":8883");
+	                		((SSLSocket) socket).connect(new InetSocketAddress(endpoint, 8883));
+	                		Log.i("AwsIotTlsSocketFactory.ensureTls", "connected to " + endpoint + ":8883");
+	                		((SSLSocket) socket).startHandshake();
+	                	}
+	                	HostnameVerifier hv = HttpsURLConnection.getDefaultHostnameVerifier();
+	                	SSLSession s = ((SSLSocket) socket).getSession();
+	                	Log.d("AwsIotTlsSocketFactory.ensureTls", ((SSLSocket) socket).getRemoteSocketAddress().toString());
+	                	Log.i("AwsIotTlsSocketFactory.ensureTls", "Expected " + endpoint + ", found " + s.getPeerPrincipal());
+	                	// Verify that the certicate hostname is for endpoint
+	                	if (!hv.verify(this.endpoint, s)) {
+	                		throw new Error("BAD SSL CERT! MAYBE A MIM ATTACT!", new SSLHandshakeException("Expected " + endpoint + ", found " + s.getPeerPrincipal()));
+	                	}
+	                	// At this point SSLSocket performed certificate verificaiton and
+	                	// we have performed hostname verification, so it is safe to proceed.
+                        sslParams = SSLContext.getDefault().getDefaultSSLParameters();
+                        ((SSLSocket) socket).close();
+                        
+                        socket = sslSocketFactory.createSocket();
+                        ((SSLSocket) socket).setEnabledProtocols(new String[]{TLS_V_1_2});
+                        return socket;
+	                }
+	    		} catch(Exception e) {
+	        		Log.e("AwsIotTlsSocketFactory.ensureTls", "Exception occer", e);
+	        	}
+	    	} else {
+	            sslParams.setEndpointIdentificationAlgorithm("HTTPS");
+	    	}
+	    	((SSLSocket) socket).setSSLParameters(sslParams);
+    	}
+	
+    	return socket;
     }
 
 }

@@ -20,12 +20,6 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.projectlombok</groupId>
-      <artifactId>lombok</artifactId>
-      <version>1.16.8</version>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-core</artifactId>
       <version>2.7.4</version>
@@ -40,9 +34,22 @@
       <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
       <version>[1.1.0]</version>
     </dependency>
+    <dependency>
+		<groupId>org.projectlombok</groupId>
+		<artifactId>lombok</artifactId>
+		<version>1.16.18</version>
+		<scope>provided</scope>
+	</dependency>
+<dependency>
+<groupId>android</groupId>     
+<artifactId>android</artifactId>     
+<version>19.0.0</version>     
+<scope>system</scope>     
+<systemPath>C:/Users/hexiangl/Documents/GitHub/aws-iot-device-sdk-java/aws-iot-device-sdk-java/android.jar</systemPath>     
+</dependency>
   </dependencies>
   <build>
-    <sourceDirectory>target/generated-sources/delombok</sourceDirectory>
+    <sourceDirectory>src/main/java</sourceDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -50,26 +57,12 @@
         <version>3.5.1</version>
         <configuration>
           <excludes>
+          	<compilerVersion>1.9</compilerVersion>
+        	<source>1.9</source>
+        	<target>1.9</target>
             <exclude>**/odin/*.java</exclude>
           </excludes>
         </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.projectlombok</groupId>
-        <artifactId>lombok-maven-plugin</artifactId>
-        <version>1.16.8.0</version>
-        <executions>
-          <execution>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>delombok</goal>
-            </goals>
-            <configuration>
-              <addOutputDirectory>false</addOutputDirectory>
-              <sourceDirectory>src/main/java</sourceDirectory>
-            </configuration>
-          </execution>
-        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
